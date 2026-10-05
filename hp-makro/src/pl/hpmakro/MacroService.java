@@ -41,6 +41,8 @@ public class MacroService extends AccessibilityService {
     private static final long UI_TIMEOUT_MS = 6000;
     private static final int JITTER = 6;
 
+    private static final String IDLE_TEXT = "⏸ HP Makro: dotknij = start  ·  przytrzymaj = wyłącz";
+
     static volatile MacroService instance;
     private static final ArrayDeque<String> LOG = new ArrayDeque<>();
 
@@ -59,7 +61,7 @@ public class MacroService extends AccessibilityService {
         instance = this;
         main = new Handler(Looper.getMainLooper());
         addOverlay();
-        status("⏸ HP Makro: dotknij, aby uruchomić");
+        status(IDLE_TEXT);
         log("usługa włączona");
     }
 
@@ -106,8 +108,15 @@ public class MacroService extends AccessibilityService {
         running = false;
         if (worker != null) worker.interrupt();
         worker = null;
-        status("⏸ HP Makro: dotknij, aby uruchomić");
+        status(IDLE_TEXT);
         log("stop");
+    }
+
+    /** Zatrzymuje makro i wyłącza usługę dostępności (pasek znika, aplikacja przestaje działać). */
+    void shutdown() {
+        stop();
+        log("aplikacja wyłączona");
+        disableSelf();
     }
 
     private boolean dryRun() {
@@ -124,6 +133,12 @@ public class MacroService extends AccessibilityService {
         overlay.setPadding(24, 10, 24, 10);
         overlay.setOnClickListener(new View.OnClickListener() {
             @Override public void onClick(View v) { toggle(); }
+        });
+        overlay.setOnLongClickListener(new View.OnLongClickListener() {
+            @Override public boolean onLongClick(View v) {
+                shutdown();
+                return true;
+            }
         });
         WindowManager.LayoutParams lp = new WindowManager.LayoutParams(
                 WindowManager.LayoutParams.WRAP_CONTENT, WindowManager.LayoutParams.WRAP_CONTENT,
@@ -350,7 +365,7 @@ public class MacroService extends AccessibilityService {
         } catch (RuntimeException e) {
             log("błąd: " + e);
             running = false;
-            status("⏸ HP Makro: błąd, dotknij, aby uruchomić");
+            status("⏸ HP Makro: błąd  ·  dotknij = start  ·  przytrzymaj = wyłącz");
         }
     }
 }

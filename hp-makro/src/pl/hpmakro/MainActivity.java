@@ -22,6 +22,7 @@ public class MainActivity extends Activity {
     private TextView serviceStatus;
     private Button settingsButton;
     private Button startButton;
+    private Button offButton;
     private TextView logView;
 
     private final Runnable refresher = new Runnable() {
@@ -51,7 +52,8 @@ public class MainActivity extends Activity {
                 + "1. Włącz usługę HP Makro w ustawieniach dostępności (jednorazowo).\n"
                 + "2. Naciśnij START albo dotknij paska u góry ekranu.\n"
                 + "3. Przejdź do gry na podgląd (oko). Pasek u góry pokazuje stan, "
-                + "dotknięcie go zatrzymuje makro.");
+                + "dotknięcie go zatrzymuje makro, przytrzymanie wyłącza aplikację.\n"
+                + "Po wyłączeniu włączasz ją z powrotem w ustawieniach dostępności.");
         help.setPadding(0, pad / 2, 0, pad);
         root.addView(help);
 
@@ -89,6 +91,17 @@ public class MainActivity extends Activity {
             }
         });
         root.addView(startButton);
+
+        offButton = new Button(this);
+        offButton.setText("Wyłącz aplikację");
+        offButton.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) {
+                MacroService s = MacroService.instance;
+                if (s != null) s.shutdown();
+                finishAndRemoveTask();
+            }
+        });
+        root.addView(offButton);
 
         TextView logTitle = new TextView(this);
         logTitle.setText("Log:");
@@ -129,6 +142,7 @@ public class MainActivity extends Activity {
         serviceStatus.setTextColor(enabled ? Color.rgb(80, 200, 120) : Color.rgb(230, 80, 80));
         settingsButton.setVisibility(enabled ? View.GONE : View.VISIBLE);
         startButton.setEnabled(enabled);
+        offButton.setVisibility(enabled ? View.VISIBLE : View.GONE);
         startButton.setText(enabled && s.isRunning() ? "STOP" : "START");
         logView.setText(MacroService.logText());
     }
