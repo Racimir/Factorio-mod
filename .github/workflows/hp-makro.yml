@@ -1,0 +1,45 @@
+name: HP Makro APK
+
+on:
+  push:
+    paths:
+      - 'hp-makro/**'
+      - '.github/workflows/hp-makro.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build APK
+        working-directory: hp-makro
+        run: |
+          set -e
+          BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
+          JAR=$(ls -d "$ANDROID_HOME"/platforms/android-* | sort -V | tail -1)/android.jar
+          echo "build-tools: $BT"; echo "android.jar: $JAR"
+          mkdir -p build/gen build/classes
+          "$BT/aapt2" compile --dir res -o build/res.zip
+          "$BT/aapt2" link -o build/res.apk -I "$JAR" --manifest AndroidManifest.xml --java build/gen build/res.zip
+          javac -nowarn -source 8 -target 8 -bootclasspath "$JAR" -d build/classes $(find src build/gen -name '*.java')
+          "$BT/d8" --min-api 24 --lib "$JAR" --output build $(find build/classes -name '*.class')
+          cp build/res.apk build/unaligned.apk
+          (cd build && zip -q unaligned.apk classes.dex)
+          "$BT/zipalign" -f -p 4 build/unaligned.apk build/aligned.apk
+          keytool -genkeypair -keystore build/key.jks -storepass hpmakro -keypass hpmakro -alias hpmakro \
+            -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=HP Makro"
+          "$BT/apksigner" sign --ks build/key.jks --ks-pass pass:hpmakro --out HP-Makro.apk build/aligned.apk
+          "$BT/apksigner" verify -v HP-Makro.apk
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete hp-makro --yes --cleanup-tag || true
+          gh release create hp-makro hp-makro/HP-Makro.apk --target "${{ github.sha }}" \
+            --title "HP Makro" --notes "Pobierz HP-Makro.apk na telefonie i zainstaluj."
