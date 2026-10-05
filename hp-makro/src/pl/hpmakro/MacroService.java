@@ -36,7 +36,8 @@ public class MacroService extends AccessibilityService {
     static final String PREF_DRY_RUN = "dry_run";
 
     private static final long CALM_MS = 1000;      // ile spokoju, zanim uznamy że jesteśmy poza walką
-    private static final long POLL_MS = 350;       // Android pozwala na zrzut co ~333 ms
+    private static final long POLL_MS = 350;
+    private static final long IDLE_RECHECK_MS = 20000;  // bez walki tak długo przy włączonym polowaniu = sprawdź stan       // Android pozwala na zrzut co ~333 ms
     private static final long TAP_DELAY_MS = 800;
     private static final long UI_TIMEOUT_MS = 6000;
     private static final int JITTER = 6;
@@ -272,10 +273,10 @@ public class MacroService extends AccessibilityService {
             return false;
         }
         tap(Analyzer.STOP_TAP, "Przerwij");
-        boolean ok = waitFor(WAIT_PAUSED) != null;
-        if (!ok) log("po Przerwij nie pojawiło się Walcz");
+        // W trakcie walki gra najpierw ją kończy, więc "Walcz" może pojawić się dopiero później.
+        if (waitFor(WAIT_PAUSED) == null) log("Przerwij kliknięte, gra kończy jeszcze walkę");
         backToView();
-        return ok ? Boolean.FALSE : null;
+        return false;
     }
 
     // --- Główna pętla ------------------------------------------------------------------
@@ -284,6 +285,7 @@ public class MacroService extends AccessibilityService {
         Boolean hunting = null;       // nieznany na starcie; ustali się przy pierwszej akcji
         int[] prevScene = null;
         long calmSince = -1;
+        int lowReadings = 0;
         try {
             while (running) {
                 Analyzer a = shot();
@@ -314,23 +316,28 @@ public class MacroService extends AccessibilityService {
                         Math.round(hp * 100), outOfCombat ? "spokój" : "walka",
                         hunting == null ? "?" : hunting ? "tak" : "nie", dryRun() ? "  ·  TEST" : ""));
 
-                if (outOfCombat) {
-                    Boolean result = null;
-                    boolean acted = false;
-                    if (!full && !Boolean.FALSE.equals(hunting)) {
-                        log(String.format(Locale.ROOT, "HP %d%% < max -> Przerwij", Math.round(hp * 100)));
-                        result = setHunting(false);
-                        acted = true;
-                    } else if (full && !Boolean.TRUE.equals(hunting)) {
-                        log("HP pełne -> Walcz");
-                        result = setHunting(true);
-                        acted = true;
-                    }
-                    if (acted) {
-                        if (result != null) hunting = result;
-                        prevScene = null;
-                        calmSince = -1;
-                    }
+                // Przerwij działa także w trakcie walki (gra najpierw ją kończy), więc nie czekamy na spokój.
+                // Dwa niskie odczyty z rzędu chronią przed pojedynczym błędnym zrzutem.
+                lowReadings = hp < Analyzer.HP_PAUSE_BELOW ? lowReadings + 1 : 0;
+                Boolean result = null;
+                boolean acted = false;
+                if (lowReadings >= 2 && !Boolean.FALSE.equals(hunting)) {
+                    log(String.format(Locale.ROOT, "HP %d%% < %d%% -> Przerwij",
+                            Math.round(hp * 100), Math.round(Analyzer.HP_PAUSE_BELOW * 100)));
+                    result = setHunting(false);
+                    acted = true;
+                } else if (full && outOfCombat
+                        && (!Boolean.TRUE.equals(hunting) || now - calmSince >= IDLE_RECHECK_MS)) {
+                    // Długo bez walki przy "polowanie: tak" = coś się rozjechało; setHunting sprawdzi stan w grze.
+                    log(Boolean.TRUE.equals(hunting) ? "długo bez walki -> sprawdzam polowanie" : "HP pełne -> Walcz");
+                    result = setHunting(true);
+                    acted = true;
+                }
+                if (acted) {
+                    if (result != null) hunting = result;
+                    prevScene = null;
+                    calmSince = -1;
+                    lowReadings = 0;
                 }
                 Thread.sleep(POLL_MS);
             }

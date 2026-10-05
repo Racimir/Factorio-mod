@@ -12,7 +12,8 @@ final class Analyzer {
 
     // Pasek HP (czerwone wypełnienie przy pełnym zdrowiu)
     static final int HP_X0 = 35, HP_X1 = 521, HP_Y0 = 314, HP_Y1 = 369;
-    static final float HP_FULL = 0.99f;
+    static final float HP_FULL = 0.99f;          // wznowienie polowania
+    static final float HP_PAUSE_BELOW = 0.90f;   // wstrzymanie polowania
 
     // Zakładki na dole ekranu: zaznaczona ma ciemniejsze tło (~35 zamiast ~75)
     static final int[] EYE_SAMPLE = {470, 2230, 20, 20};

@@ -46,7 +46,7 @@ public class MainActivity extends Activity {
         root.addView(title);
 
         TextView help = new TextView(this);
-        help.setText("Poza walką: HP poniżej max → globus → Przerwij → oko.\n"
+        help.setText("HP poniżej 90% → globus → Przerwij → oko.\n"
                 + "HP pełne → globus → Walcz.\n\n"
                 + "1. Włącz usługę HP Makro w ustawieniach dostępności (jednorazowo).\n"
                 + "2. Naciśnij START albo dotknij paska u góry ekranu.\n"
