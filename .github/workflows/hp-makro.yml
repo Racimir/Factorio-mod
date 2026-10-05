@@ -21,7 +21,8 @@ jobs:
         run: |
           set -e
           BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
-          JAR=$(ls -d "$ANDROID_HOME"/platforms/android-* | sort -V | tail -1)/android.jar
+          JAR="$ANDROID_HOME/platforms/android-36/android.jar"
+          [ -f "$JAR" ] || JAR=$(ls -d "$ANDROID_HOME"/platforms/android-[0-9]* | sort -V | tail -1)/android.jar
           echo "build-tools: $BT"; echo "android.jar: $JAR"
           mkdir -p build/gen build/classes
           "$BT/aapt2" compile --dir res -o build/res.zip

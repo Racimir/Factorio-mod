@@ -38,7 +38,7 @@ public class MainActivity extends Activity {
 
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(pad, pad * 2, pad, pad);
+        root.setPadding(pad, pad, pad, pad);
 
         TextView title = new TextView(this);
         title.setText("HP Makro");
@@ -102,7 +102,11 @@ public class MainActivity extends Activity {
         scroll.addView(logView);
         root.addView(scroll, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f));
 
-        setContentView(root);
+        // Od Androida 15 aplikacja rysuje się pod paskami systemowymi; ramka odsuwa treść od nich.
+        android.widget.FrameLayout frame = new android.widget.FrameLayout(this);
+        frame.setFitsSystemWindows(true);
+        frame.addView(root);
+        setContentView(frame);
     }
 
     @Override
