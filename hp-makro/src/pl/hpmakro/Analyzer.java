@@ -29,12 +29,11 @@ final class Analyzer {
     static final int[] STOP_TAP = {870, 805};
     static final int[] FIGHT_TAP = {875, 867};
 
-    // Walka: ruch na scenie albo dużo jasnych cyfr obrażeń
-    static final int[] VIEWPORT = {36, 422, 1008, 1748};
-    static final int[] VIEWPORT_EXCLUDE = {885, 2025, 150, 150};   // przycisk czatu
-    static final int MOTION_PIXEL_DIFF = 40;
-    static final float MOTION_COMBAT = 0.015f;
-    static final int DAMAGE_TEXT_COMBAT = 8000;
+    // Marsz vs walka: podczas marszu między walkami tło się przesuwa, w walce i podczas odpoczynku stoi.
+    // Patrzymy tylko na lewy skraj sceny, gdzie nie ma postaci ani cyfr obrażeń.
+    static final int[] LEFT_EDGE = {40, 430, 160, 1700};
+    static final int MOTION_PIXEL_DIFF = 10;      // o ile musi się zmienić piksel; piasek ma mały kontrast
+    static final float WALK_MOTION = 0.05f;       // udział zmienionych pikseli skraju = tło się przesuwa
     private static final int STEP = 2;
 
     final int[] px;
@@ -100,29 +99,10 @@ final class Analyzer {
         return hue <= 20f && hue >= -20f;
     }
 
-    /** Liczba jasnych, szarobiałych pikseli na scenie (cyfry obrażeń), w skali ekranu 1080x2400. */
-    int damagePixels() {
-        int x0 = x(VIEWPORT[0]), y0 = y(VIEWPORT[1]);
-        int x1 = x(VIEWPORT[0] + VIEWPORT[2]), y1 = y(VIEWPORT[1] + VIEWPORT[3]);
-        int ex0 = x(VIEWPORT_EXCLUDE[0]), ey0 = y(VIEWPORT_EXCLUDE[1]);
-        int ex1 = x(VIEWPORT_EXCLUDE[0] + VIEWPORT_EXCLUDE[2]), ey1 = y(VIEWPORT_EXCLUDE[1] + VIEWPORT_EXCLUDE[3]);
-        int count = 0;
-        for (int yy = y0; yy < y1; yy += STEP) {
-            for (int xx = x0; xx < x1; xx += STEP) {
-                if (xx >= ex0 && xx < ex1 && yy >= ey0 && yy < ey1) continue;
-                int c = px[yy * w + xx];
-                int r = (c >> 16) & 255, g = (c >> 8) & 255, b = c & 255;
-                int max = Math.max(r, Math.max(g, b)), min = Math.min(r, Math.min(g, b));
-                if (max > 170 && (max - min) * 255 < 40 * max) count++;
-            }
-        }
-        return Math.round(count * STEP * STEP / (sx * sy));
-    }
-
-    /** Pomniejszona szara kopia sceny do porównywania kolejnych klatek. */
-    int[] sceneGray() {
-        int x0 = x(VIEWPORT[0]), y0 = y(VIEWPORT[1]);
-        int x1 = x(VIEWPORT[0] + VIEWPORT[2]), y1 = y(VIEWPORT[1] + VIEWPORT[3]);
+    /** Pomniejszona szara kopia lewego skraju sceny do porównywania kolejnych klatek. */
+    int[] edgeGray() {
+        int x0 = x(LEFT_EDGE[0]), y0 = y(LEFT_EDGE[1]);
+        int x1 = x(LEFT_EDGE[0] + LEFT_EDGE[2]), y1 = y(LEFT_EDGE[1] + LEFT_EDGE[3]);
         int[] out = new int[((y1 - y0 + STEP - 1) / STEP) * ((x1 - x0 + STEP - 1) / STEP)];
         int i = 0;
         for (int yy = y0; yy < y1; yy += STEP) {
@@ -134,7 +114,7 @@ final class Analyzer {
         return out;
     }
 
-    /** Udział pikseli sceny, które zmieniły się między klatkami. */
+    /** Udział pikseli, które zmieniły się między klatkami. */
     static float motion(int[] a, int[] b) {
         if (a == null || b == null || a.length != b.length || a.length == 0) return 0f;
         int changed = 0;
@@ -142,10 +122,6 @@ final class Analyzer {
             if (Math.abs(a[i] - b[i]) > MOTION_PIXEL_DIFF) changed++;
         }
         return changed / (float) a.length;
-    }
-
-    static boolean isCombat(float motion, int damagePixels) {
-        return motion >= MOTION_COMBAT || damagePixels >= DAMAGE_TEXT_COMBAT;
     }
 
     /** Na ekranie świata: TRUE = polowanie trwa, FALSE = wstrzymane, null = nie rozpoznano. */
