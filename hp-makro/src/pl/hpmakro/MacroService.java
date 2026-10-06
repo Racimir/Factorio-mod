@@ -35,8 +35,7 @@ public class MacroService extends AccessibilityService {
     static final String PREFS = "hpmakro";
     static final String PREF_DRY_RUN = "dry_run";
 
-    private static final long POLL_MS = 350;
-    private static final long IDLE_RECHECK_MS = 45000;  // tło stoi tak długo przy włączonym polowaniu = sprawdź stan       // Android pozwala na zrzut co ~333 ms
+    private static final long POLL_MS = 350;           // Android pozwala na zrzut co ~333 ms
     private static final long TAP_DELAY_MS = 800;
     private static final long UI_TIMEOUT_MS = 6000;
     private static final int JITTER = 6;
@@ -298,8 +297,8 @@ public class MacroService extends AccessibilityService {
     private void loop() {
         Boolean hunting = null;       // nieznany na starcie; ustali się przy pierwszej akcji
         int[] prevEdge = null;
-        long staticSince = -1;
-        int lowReadings = 0;
+        int walkFrames = 0;           // ile klatek z rzędu tło się przesuwa
+        int lowReadings = 0;          // ile odczytów z rzędu HP jest poniżej progu
         try {
             while (running) {
                 Analyzer a = shot();
@@ -310,7 +309,7 @@ public class MacroService extends AccessibilityService {
                 if (a.screen() != Analyzer.Screen.VIEW) {
                     status("▶ Wejdź na podgląd (oko)  ·  dotknij = stop");
                     prevEdge = null;
-                    staticSince = -1;
+                    walkFrames = 0;
                     Thread.sleep(POLL_MS);
                     continue;
                 }
@@ -320,42 +319,37 @@ public class MacroService extends AccessibilityService {
                 boolean hadPrev = prevEdge != null;
                 float bgMotion = Analyzer.motion(prevEdge, edge);
                 prevEdge = edge;
-                boolean walking = bgMotion >= Analyzer.WALK_MOTION;
-                long now = SystemClock.elapsedRealtime();
-                if (walking || !hadPrev) staticSince = -1;
-                else if (staticSince < 0) staticSince = now;
+                // Dwie klatki z rzędu, żeby pojedyncze szarpnięcie obrazu w walce nie udawało marszu.
+                walkFrames = bgMotion >= Analyzer.WALK_MOTION ? walkFrames + 1 : 0;
+                boolean walking = walkFrames >= 2;
                 float hp = a.hp();
                 boolean full = hp >= Analyzer.HP_FULL;
+                // W marszu wychodzimy już poniżej 90%; w walce dopiero poniżej 30%, bo lifesteal leczy.
+                float threshold = walking ? Analyzer.HP_PAUSE_WALKING : Analyzer.HP_PAUSE_FIGHTING;
 
                 status(String.format(Locale.ROOT, "▶ HP %d%%  ·  tło %d%% (%s)  ·  polowanie: %s%s  ·  dotknij = stop",
                         Math.round(hp * 100), Math.round(bgMotion * 100), walking ? "marsz" : "stoi",
                         hunting == null ? "?" : hunting ? "tak" : "nie", dryRun() ? "  ·  TEST" : ""));
 
                 // Dwa niskie odczyty z rzędu chronią przed pojedynczym błędnym zrzutem.
-                lowReadings = hp < Analyzer.HP_PAUSE_BELOW ? lowReadings + 1 : 0;
+                lowReadings = hp < threshold ? lowReadings + 1 : 0;
                 Boolean result = null;
                 boolean acted = false;
-                if (lowReadings >= 2 && walking && !Boolean.FALSE.equals(hunting)) {
-                    // Przerywamy dopiero w marszu, żeby lifesteal w walce mógł jeszcze podleczyć.
-                    log(String.format(Locale.ROOT, "marsz, HP %d%% < %d%% -> Przerwij",
-                            Math.round(hp * 100), Math.round(Analyzer.HP_PAUSE_BELOW * 100)));
+                if (lowReadings >= 2 && !Boolean.FALSE.equals(hunting)) {
+                    log(String.format(Locale.ROOT, "%s, HP %d%% < %d%% -> Przerwij", walking ? "marsz" : "walka",
+                            Math.round(hp * 100), Math.round(threshold * 100)));
                     result = setHunting(false);
                     acted = true;
                 } else if (full && !Boolean.TRUE.equals(hunting)) {
-                    log("HP pełne -> Walcz");
-                    result = setHunting(true);
-                    acted = true;
-                } else if (full && Boolean.TRUE.equals(hunting) && staticSince >= 0
-                        && now - staticSince >= IDLE_RECHECK_MS) {
-                    // Tło długo stoi przy "polowanie: tak" = może jednak stoimy; setHunting sprawdzi stan w grze.
-                    log("tło długo stoi -> sprawdzam polowanie");
+                    // Także raz na starcie, gdy stan polowania jest jeszcze nieznany.
+                    log(hunting == null ? "start: sprawdzam polowanie" : "HP pełne -> Walcz");
                     result = setHunting(true);
                     acted = true;
                 }
                 if (acted) {
                     if (result != null) hunting = result;
                     prevEdge = null;
-                    staticSince = -1;
+                    walkFrames = 0;
                     lowReadings = 0;
                 }
                 Thread.sleep(POLL_MS);
